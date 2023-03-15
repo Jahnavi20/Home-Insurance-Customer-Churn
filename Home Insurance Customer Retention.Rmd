@@ -1,0 +1,1162 @@
+---
+title: "House Insurance Customer Retention"
+date: "05/02/2022"
+output:
+  html_document:
+    toc: TRUE
+    number_sections: FALSE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# House Insurance Customer Retention
+## Preprocessing
+### Reading dataset
+
+```{r}
+library(readxl)
+data <- read.csv("C:/Users/jahna/OneDrive/Documents/Projects/Home Insurance Customer Retention Project/Customer_Retention_dataset_R.csv")
+head(data,6)
+```
+### Remove rows with missing Values
+
+```{r}
+summary(data)
+data <- na.omit(data)
+summary(data)
+
+```
+### Exploring outliers
+
+```{r}
+
+
+# On analyzing all the predictor age quantiles there are only outliers in age column. We restrict age values less than 110 years in our analysis.
+library(dplyr)
+quantile(data$ni.age)
+
+data_age_outlier <- data %>% filter(data$ni.age < 110)
+par(mfrow =c(1,2))
+
+boxplot(data$ni.age, xlab="Age",main="Before Outliers")
+boxplot(data_age_outlier$ni.age,xlab="Age",main="After Outliers")
+
+
+#re-assigning data_age_outlier to data
+data =  data_age_outlier
+
+```
+### Feature Engineering
+
+```{r}
+
+
+
+# Drop ID column in data
+data = subset(data, select = -c(id) )
+
+
+
+# Family column creation (We combined no of adults and children predictors in the dataset to form family size of the household)
+family_size <- data$n.adults+data$n.children
+data['family_size']=family_size
+
+
+#Zoning pincode into Zones (We used tableau to localize the zipcodes to locations (states))
+zones = c()
+zone_idx = as.numeric(substr(data$zip.code, 1, 2))
+data['zone_idx']=zone_idx
+
+for (i in data$zone_idx)
+{
+  if(i==85)
+  zones = append(zones, 2)
+  else if (i==80)
+  zones = append(zones,3)
+  else if(i==98)
+    zones = append(zones,1)
+  else if(i==50)
+    zones = append(zones,6)
+  else if(i==15)
+    zones = append(zones,5)
+  else
+    zones = append(zones,4)
+}
+
+data['zones']=zones
+
+# Removing redundant columns
+data = subset(data, select = -c(n.adults,n.children,zone_idx,zip.code) )
+
+
+
+
+
+
+
+
+```
+
+### Dummy variable creation
+
+```{r}
+library(fastDummies)
+
+# Creating dummy variables
+data.dummy = data
+
+
+# Binary data variables ni.gender
+data.dummy$ni.gender = ifelse(data.dummy$ni.gender=="M", 1, 0)
+
+# Other data variables house.color, coverage.type, dwelling.type, sales.channel, data.zones 
+data.dummy <- dummy_cols(data.dummy, 
+                   select_columns = "house.color")
+
+
+data.dummy <- dummy_cols(data.dummy, 
+                   select_columns = "coverage.type")
+
+data.dummy <- dummy_cols(data.dummy,
+                   select_columns = "dwelling.type")
+
+data.dummy <- dummy_cols(data.dummy,
+                   select_columns = "sales.channel")
+
+data.dummy <- dummy_cols(data.dummy,
+                   select_columns = "credit")
+
+data.dummy <- dummy_cols(data.dummy, 
+                   select_columns = "zones")
+
+data.dummy <- dummy_cols(data.dummy, select_columns = "year")
+data.dummy = subset(data.dummy, select = -c(year,zones,sales.channel,dwelling.type,coverage.type,house.color,credit,year_2016,zones_6,credit_medium,sales.channel_Phone,dwelling.type_Tenant,coverage.type_C,house.color_yellow) )
+
+
+```
+
+## Data Exploration
+### correlation matrix
+```{r}
+
+corr.variables <- subset(data.dummy, select = c("ni.age","len.at.res","premium","tenure","family_size"))
+cor(corr.variables, use = "complete.obs")
+
+```
+
+### Year Vs Insurance Policy
+```{r}
+temp1 = data[data$cancel==1,]
+temp0 = data[data$cancel==0,]
+par(mfrow =c(1,2),mgp=c(100,1,0))
+counts <- table(temp0$year)
+barplot(counts, main="continuing policy holders (cancel=0)",
+   xlab="Year", col=c("blue"))
+
+counts <- table(temp1$year)
+barplot(counts, main="cancelled policy holders (cancel=1)",
+   xlab="Year", col=c("red"))
+
+sprintf("For kangaroo company, Annually it can observed that the maximum  policy cancellations are in year 2014, whereas it is  following a declining trend till the year 2016, whereas the continuing policies are continuing to increase across the years. ")
+
+```
+
+
+
+### Zone Vs Insurance Policy
+```{r}
+
+#1 : washington
+#2 :  Arizona
+#3 :  colorodo
+#4 : virginia
+#5 : pennyslvania
+#6 : others (50 series)
+
+temp1 = data[data$cancel==1,]
+temp0 = data[data$cancel==0,]
+par(mfrow =c(1,2))
+counts <- table(temp0$zone)
+barplot(counts, main="continuing policy holders (cancel=0)",
+   xlab="Zones", col=c("blue"))
+
+counts <- table(temp1$zone)
+barplot(counts, main="cancelled policy holders (cancel=1)",
+   xlab="Zones", col=c("red"))
+
+sprintf("For kangaroo company, the maximum number of cancelled policy holders are coming from 2,6 i.e Arizona and other parts of USA, whereas least cancellations are coming from virginia and pennyslvania.
+The maximum continuing policy holders are coming from Arizona and other parts of USA, whereas least continuing are coming from virginia.
+")
+
+```
+### house.color Vs Insurance Policy
+```{r}
+
+
+
+temp1 = data[data$cancel==1,]
+temp0 = data[data$cancel==0,]
+par(mfrow =c(1,2),mgp=c(100,1,0))
+counts <- table(temp0$house.color)
+barplot(counts, main="continuing customers (cancel=0)",
+   xlab="Color", col=c("blue"))
+
+counts <- table(temp1$house.color)
+barplot(counts, main="cancelled customers (cancel=1)",
+   xlab="Color", col=c("red"))
+
+sprintf("When we observe continuing and cancelled customers, the preferred color of the house is white, followed by blue and red, however there is no differentiation between their choices.")
+
+
+```
+
+### ni.age Vs Insurance Policy
+```{r}
+
+
+
+temp1 = data[data$cancel==1,]
+temp0 = data[data$cancel==0,]
+par(mfrow =c(1,2),mgp=c(100,1,0))
+boxplot(temp0$ni.age, xlab="Age",main="Continuing customers (credit = 0)", col=c("blue"))
+boxplot(temp1$ni.age,xlab="Age",main="Cancelled customers (credit=1)", col=c("red"))
+
+sprintf("For kangaroo company, Age of the customer doesn’t seem to differentiate the customer relationship with the company, however based on quantile range, for cancelled customers, the spread of age is more when compared to continuing customers. ")
+
+
+```
+### len.at.resident Vs Insurance Policy
+```{r}
+
+
+
+temp1 = data[data$cancel==1,]
+temp0 = data[data$cancel==0,]
+par(mfrow =c(1,2))
+boxplot(temp0$len.at.res, xlab="len.at.res",main="Continuing customers (credit = 0)", col=c("blue"))
+boxplot(temp1$len.at.res,xlab="len.at.res",main="Cancelled customers (credit=1)", col=c("red"))
+
+sprintf("There is not much of a differentiation in distribution in both the cases. But, most of them tend to stay for less period of time.")
+
+
+```
+### credit Vs Insurance Policy
+```{r}
+
+
+
+temp1 = data[data$cancel==1,]
+temp0 = data[data$cancel==0,]
+par(mfrow =c(1,2))
+
+counts <- table(temp0$credit)
+barplot(counts, main="continuing policy holders (cancel=0)",
+   xlab="Credit", col=c("blue"))
+
+counts <- table(temp1$credit)
+barplot(counts, main="cancelled policy holders (cancel=1)",
+   xlab="Credit", col=c("red"))
+
+sprintf("It can be seen that, the number of people with high credit score are more in continuing policy holders followed by medium and low. But, for cancelled customers, the trend is high, low and medium. ")
+
+
+
+```
+
+
+### Coverage Vs Insurance Policy
+```{r}
+
+#Coverage A:
+#Damage to House	
+#Covers damage to the house. The face amount of the policy (for example $100,000) is the most you will receive if your house is totally destroyed.
+
+#Coverage B:
+#Other Structures	
+#Covers damage to other structures or buildings, such as a detached garage, work shed, or fencing.
+
+#Coverage C:
+#Personal Property	Covers damage to, or loss of personal property. Personal property includes household contents and other personal belongings used, owned or worn by you and your family.
+
+temp1 = data[data$cancel==1,]
+temp0 = data[data$cancel==0,]
+par(mfrow =c(1,2))
+
+counts <- table(temp0$coverage.type)
+barplot(counts, main="continuing policy holders (cancel=0)",
+   xlab="Coverage", col=c("blue"))
+
+counts <- table(temp1$coverage.type)
+barplot(counts, main="cancelled policy holders (cancel=1)",
+   xlab="Coverage", col=c("red"))
+
+sprintf("It can be seen that, the order of preference for both continuing and cancelled customers is C,A and B. ")
+
+
+
+```
+### Dwelling type Vs Insurance Policy
+```{r}
+
+
+temp1 = data[data$cancel==1,]
+temp0 = data[data$cancel==0,]
+par(mfrow =c(1,2))
+
+counts <- table(temp0$dwelling.type)
+barplot(counts, main="continuing policy holders (cancel=0)",
+   xlab="Dwelling", col=c("blue"))
+
+counts <- table(temp1$dwelling.type)
+barplot(counts, main="cancelled policy holders (cancel=1)",
+   xlab="Dwelling", col=c("red"))
+
+sprintf("It can be seen that the distribution of Dwelling is same for both continuing and cancelled customers.
+But, House owning policy holders are majority in continuing and cancelled holders.
+  ")
+
+
+
+```
+### Premium Vs Insurance Policy
+```{r}
+
+
+temp1 = data[data$cancel==1,]
+temp0 = data[data$cancel==0,]
+par(mfrow =c(1,2))
+
+
+boxplot(temp0$premium, xlab="premium",main="Continuing customers (cancel = 0)", col=c("blue"))
+boxplot(temp1$premium,xlab="premium",main="Cancelled customers (cancel=1)", col=c("red"))
+
+sprintf("There is not much of a differentiation between continuing and cancelled customers in terms of premium.")
+
+
+
+```
+### Sales.channel Vs Insurance Policy
+```{r}
+
+
+temp1 = data[data$cancel==1,]
+temp0 = data[data$cancel==0,]
+par(mfrow =c(1,2))
+
+counts <- table(temp0$sales.channel)
+barplot(counts, main="continuing policy holders (cancel=0)",
+   xlab="Sales channel", col=c("blue"))
+
+counts <- table(temp1$sales.channel)
+barplot(counts, main="cancelled policy holders (cancel=1)",
+   xlab="Sales channel", col=c("red"))
+
+sprintf("For continuing customers, for most of them, the preferred sales channel is broker, whereas, for cancelled customers, the most used mode is phone, followed by broker. ")
+
+
+
+```
+### ni.gender Vs Insurance Policy
+```{r}
+
+
+temp1 = data[data$cancel==1,]
+temp0 = data[data$cancel==0,]
+par(mfrow =c(1,2))
+
+counts <- table(temp0$ni.gender)
+barplot(counts, main="continuing policy holders (cancel=0)",
+   xlab="Gender", col=c("blue"))
+
+counts <- table(temp1$ni.gender)
+barplot(counts, main="cancelled policy holders (cancel=1)",
+   xlab="Gender", col=c("red"))
+
+sprintf("In both cases, number of males are greater than number of females.")
+
+
+```
+### ni.marital status Vs Insurance Policy
+```{r}
+
+
+temp1 = data[data$cancel==1,]
+temp0 = data[data$cancel==0,]
+par(mfrow =c(1,2))
+
+counts <- table(temp0$ni.marital.status)
+barplot(counts, main="continuing policy holders (cancel=0)",
+   xlab="Gender", col=c("blue"))
+
+counts <- table(temp1$ni.marital.status)
+barplot(counts, main="cancelled policy holders (cancel=1)",
+   xlab="Gender", col=c("red"))
+
+sprintf("Most of them are married in both the cases. ")
+
+
+
+```
+### tenure Vs Insurance Policy
+```{r}
+
+
+temp1 = data[data$cancel==1,]
+temp0 = data[data$cancel==0,]
+par(mfrow =c(1,2))
+
+boxplot(temp0$premium, xlab="tenure",main="Continuing customers (cancel = 0)", col=c("blue"))
+boxplot(temp1$premium,xlab="tenure",main="Cancelled customers (cancel=1)", col=c("red"))
+
+sprintf("Not much differentiation with respect to tenure between continuing and cancelled policies  ")
+
+```
+### claim.ind Vs Insurance Policy
+```{r}
+
+
+temp1 = data[data$cancel==1,]
+temp0 = data[data$cancel==0,]
+par(mfrow =c(1,2))
+
+counts <- table(temp0$claim.ind)
+barplot(counts, main="continuing policy holders (cancel=0)",
+   xlab="claim.id", col=c("blue"))
+
+counts <- table(temp1$claim.ind)
+barplot(counts, main="cancelled policy holders (cancel=1)",
+   xlab="claim.id", col=c("red"))
+
+sprintf("For policies that are cancelled, holders tend to show high claim rate compared to continuing policies ")
+
+```
+### n.family_size Vs Insurance Policy
+```{r}
+
+
+temp1 = data[data$cancel==1,]
+temp0 = data[data$cancel==0,]
+par(mfrow =c(1,2))
+
+counts <- table(temp0$family_size)
+barplot(counts, main="continuing policy holders (cancel=0)",
+   xlab="family_size", col=c("blue"))
+
+counts <- table(temp1$family_size)
+barplot(counts, main="cancelled policy holders (cancel=1)",
+   xlab="family_size", col=c("red"))
+
+sprintf("There are not much differentiations between continuing and cancelled polcies w.r.t family size, however the higher the family size, the higher the probability the customer is tending to cancel the policy.")
+
+```
+
+
+## Distribution
+### Age distribution
+
+```{r}
+# Following are continuous predictors: ni.age, len.at.res, premium, family_size, tenure
+par(mfrow=c(2,1))
+hist(data$ni.age,breaks = 100)
+hist(log(data$ni.age),breaks = 100)
+```
+
+### len.at.res distribution
+
+```{r}
+# Following are continuous predictors: ni.age, len.at.res, premium, family_size, tenure
+par(mfrow=c(3,1))
+hist(data$len.at.res,breaks = 100)
+hist(log(data$len.at.res),breaks = 100)
+hist(log(data$len.at.res)^2,breaks = 100)
+```
+
+
+
+###  Premium distribution
+```{r}
+# Following are continuous predictors: ni.age, len.at.res, premium, family_size, tenure
+par(mfrow=c(2,1))
+hist(data$premium,breaks = 100)
+hist((data$premium-mean(data$premium))/(sd(data$premium)),breaks = 100)
+```
+
+###  Family size distribution
+```{r}
+# Following are continuous predictors: ni.age, len.at.res, premium, family_size, tenure
+# Following are continuous predictors: ni.age, len.at.res, premium, family_size, tenure
+par(mfrow=c(2,1))
+hist(data$family_size,breaks = 100)
+hist(log(data$family_size),breaks = 100)
+```
+
+
+###  Tenure distribution
+```{r}
+# The peaks clearly indicte that there are two groups in the dataset that is maintaining tenure between 0-10 and another group 10-20
+par(mfrow=c(2,1))
+hist(data$tenure,breaks = 100)
+hist((data$tenure-mean(data$tenure))/(sd(data$tenure)),breaks = 100)
+```
+
+
+
+## Data Normalization and splits
+### Data Normalization
+
+```{r}
+
+# Following are continuous predictors: ni.age, len.at.res, premium, family_size, tenure
+
+
+# Data is dataframe without dummy variable creation
+
+data$ni.age =  log(data$ni.age)
+data$premium =  (data$premium-mean(data$premium))/sd(data$premium)
+data$len.at.res =  log(data$len.at.res)^2
+data$Family_size =  log(data$family_size)
+data$tenure =  (data$tenure-mean(data$tenure))/sd(data$tenure)
+
+# Data.dummy is dataframe with dummy variables (n-1)
+
+data.dummy$ni.age =  log(data.dummy$ni.age)
+data.dummy$premium =  (data.dummy$premium-mean(data.dummy$premium))/sd(data.dummy$premium)
+data.dummy$len.at.res =  log(data.dummy$len.at.res)^2
+data.dummy$family_size =  log(data.dummy$family_size)
+data.dummy$tenure =  (data.dummy$tenure-mean(data.dummy$tenure))/sd(data.dummy$tenure)
+
+
+```
+
+### Data split
+
+```{r}
+
+
+##################### data
+set.seed(123)
+split <- sample(c(rep(0, 0.7 * nrow(data)), rep(1, 0.3 * nrow(data))))
+
+train <- data[split == 0, ] 
+
+
+# train_x,train_y,test_x,test_y
+#splitting further
+train_x <- subset(data, select = -c(cancel) )
+train_y <- data$cancel
+
+test <- data[split == 1, ] 
+
+#splitting further
+test_x <- subset(test, select = -c(cancel) )
+test_y <- test$cancel
+
+###################### Dummy data
+
+#Dummy dataset
+
+splitd <- sample(c(rep(0, 0.7 * nrow(data.dummy)), rep(1, 0.3 * nrow(data.dummy))))
+
+traind <- data.dummy[splitd == 0, ] 
+
+
+# traind_x,traind_y,testd_x,testd_y
+#splitting further
+traind_x <- subset(data.dummy, select = -c(cancel) )
+traind_y <- data.dummy$cancel
+
+testd <- data.dummy[split == 1, ] 
+
+#splitting further
+testd_x <- subset(testd, select = -c(cancel) )
+testd_y <- testd$cancel
+
+
+
+```
+
+## Quantitative Metrics
+###  Confusion Matrix
+```{r}
+Accuracy <- function(preds,actual)
+{
+
+confusionMatrix(as.factor(preds), as.factor(actual),positive="1")
+
+}
+
+```
+
+
+### ROC Curve
+```{r}
+
+plot_ROC <- function(preds,actual)
+{
+library("ROCR")
+pred.2 <- prediction(preds,actual)
+perf <- performance(pred.2, "tpr", "fpr")
+auc.perf <- performance(pred.2,"auc") 
+auc.perf@y.values
+plot(perf, main = paste("Area under the curve", round(as.numeric(auc.perf@y.values),4)))
+abline(0,1)
+}
+
+```
+
+
+### Lift Curve
+
+```{r}
+plot_lift=function(preds,actual)
+{
+pred.2 <- prediction(preds,actual)
+perf1=performance(pred.2,"lift","rpp")
+plot(perf1, main="Lift curve",colorsize=T)
+}
+
+```
+
+
+
+### F1 Curve
+```{r}
+
+plot_F <- function(probs,actual)
+{
+F_values <- c() 
+for (cut_off in seq(0,1,0.01) )
+{
+#preds <- predict(logistic.mod, type = "response")
+preds.1 <- ifelse(probs > cut_off, 1, 0)
+tp <- sum((actual == 1) & (preds.1 == 1))
+tn <- sum((actual ==0) & (preds.1 == 0))
+fp <- sum((actual == 0) & (preds.1 == 1))
+fn <- sum((actual == 1) & (preds.1 == 0))
+F1 <- tp/(tp+(fp+fn)/2)
+F_values = append(F_values, F1)
+
+}
+  
+
+cut_off = seq(0,1,0.01)
+# creating dataframe
+df = data.frame(F_values,cut_off)
+dfMax <- df[ which(max(df$F_values) == df$F_values), ]
+
+
+
+plot(cut_off,F_values,main = "Plot: F Score Vs Threshold ",col="blue")
+lines(F_values~cut_off)
+
+
+#abline(v = dfMax['cut_off'], col="red", lwd=3, lty=2)
+
+
+#sprintf("The cut off value where F score is maximum is %f", dfMax['cut_off'])
+  
+}
+
+```
+
+
+## Handling Imbalanced classes
+```{r}
+prop.table(table(data$cancel))
+library("ROSE")
+
+```
+### Under Sampling
+```{r}
+under <- ovun.sample(cancel~., data=train, method = "under", N = 10000 )$data
+underd <- ovun.sample(cancel~., data=traind, method = "under", N = 10000 )$data
+
+table(under$cancel)
+
+# Training split for under sampling
+under_x <- subset(under, select = -c(cancel) )
+under_y <- under$cancel
+
+
+# Training split for dummy under sampling
+underd_x <- subset(underd, select = -c(cancel) )
+underd_y <- underd$cancel
+
+```
+
+### Over Sampling
+```{r}
+over <- ovun.sample(cancel~., data = train, method = "over", N = 30000)$data
+overd <- ovun.sample(cancel~., data = traind, method = "over", N = 30000)$data
+table(over$cancel)
+
+
+
+# Training split for under sampling
+over_x <- subset(over, select = -c(cancel) )
+over_y <- over$cancel
+
+
+# Training split for dummy under sampling
+overd_x <- subset(overd, select = -c(cancel) )
+overd_y <- overd$cancel
+
+
+
+
+```
+
+
+
+## Modeling Techniques
+
+```{r}
+# train_x, train_y, test_x, test_y
+# Dummy: traind_x, traind_y, testd_x, testd_y
+
+#under_x, under_y
+#Under Sampling: Dummy: underd_x, underd_y
+
+#over_x, over_y
+#Over Sampling: Dummy: overd_x, overd_y
+
+
+```
+
+
+###  Logistic Regression (With All features)
+#### Modeling
+```{r}
+
+logistic.model <- glm(cancel ~ year+house.color+ni.age+len.at.res+credit+coverage.type+dwelling.type+premium+sales.channel+ni.gender+ni.marital.status+tenure+claim.ind+family_size+zones , family=binomial("logit"),
+                    data=train)
+
+
+under_logistic.model <- glm(cancel ~ year+house.color+ni.age+len.at.res+credit+coverage.type+dwelling.type+premium+sales.channel+ni.gender+ni.marital.status+tenure+claim.ind+family_size+zones , family=binomial("logit"),
+                    data=under)
+
+over_logistic.model <- glm(cancel ~ year+house.color+ni.age+len.at.res+credit+coverage.type+dwelling.type+premium+sales.channel+ni.gender+ni.marital.status+tenure+claim.ind+family_size+zones , family=binomial("logit"),
+                    data=over)
+
+summary(over_logistic.model)
+
+
+```
+#### Test
+```{r}
+library("caret")
+
+
+# Without any sampling
+prob_train <- logistic.model %>% predict(train_x, type = "response")
+prob <- logistic.model %>% predict(test_x, type = "response")
+
+preds_train <- ifelse(prob_train > 0.5,1 , 0)
+preds <- ifelse(prob > 0.5,1 , 0)
+
+
+
+
+# With under sampling
+train_under_prob <- under_logistic.model %>% predict(under_x, type = "response")
+under_prob <- under_logistic.model %>% predict(test_x, type = "response")
+
+train_under_preds <- ifelse(train_under_prob > 0.5,1 , 0)
+under_preds <- ifelse(under_prob > 0.5,1 , 0)
+
+
+
+#With Over sampling
+train_over_prob <- over_logistic.model %>% predict(over_x, type = "response")
+over_prob <- over_logistic.model %>% predict(test_x, type = "response")
+
+train_over_preds <- ifelse(train_over_prob > 0.5,1 , 0)
+over_preds <- ifelse(over_prob > 0.5,1 , 0)
+
+
+
+## As we observed the number of tp has increased with under and over sampling, under sampling gave better tp count. Over sampling gave better accuracy.
+
+```
+#### Train Metrics
+```{r}
+
+### Please find train and test accuracies.
+
+# Without sampling
+Accuracy(preds_train,train_y)
+
+#Under Sampling
+Accuracy(train_under_preds,under_y)
+
+#Over Sampling
+Accuracy(train_over_preds,over_y)
+```
+
+#### Test Metrics
+```{r}
+
+### Please find train and test accuracies.
+
+# Without sampling
+
+Accuracy(preds,test_y)
+plot_ROC(preds,test_y)
+plot_lift(preds,test_y)
+plot_F(prob,test_y)
+
+
+#Under Sampling
+
+Accuracy(under_preds,test_y)
+plot_ROC(under_preds,test_y)
+plot_lift(under_preds,test_y)
+plot_F(under_prob,test_y)
+
+#Over Sampling
+
+Accuracy(over_preds,test_y)
+plot_ROC(over_preds,test_y)
+plot_lift(over_preds,test_y)
+plot_F(over_prob,test_y)
+
+
+
+
+```
+
+###  Logistic Regression (With significant features)
+```{r}
+
+summary(over_logistic.model)
+
+# We picked over sampled model for further analysis. On reviewing the summary of logistic model, we identified year, ni.age, len.at.res, credit, premium. ni.marital.status, tenure, claim.ind. family_size, zones are statistically significant. Now we perform logistic regression using above features.
+
+```
+
+#### Modeling
+```{r}
+
+SS.logistic.model <- glm(cancel ~ year+ni.age+len.at.res+credit+premium+ni.marital.status+tenure+claim.ind+family_size+zones , family=binomial("logit"),
+                    data=train)
+
+
+SS.under_logistic.model <- glm(cancel ~ year+ni.age+len.at.res+credit+premium+ni.marital.status+tenure+claim.ind+family_size+zones , family=binomial("logit"),
+                    data=under)
+
+SS.over_logistic.model <- glm(cancel ~ year+ni.age+len.at.res+credit+premium+ni.marital.status+tenure+claim.ind+family_size+zones , family=binomial("logit"),
+                    data=over)
+
+
+summary(SS.over_logistic.model)
+
+```
+#### Test
+```{r}
+library("caret")
+
+
+# Without any sampling
+prob <- SS.logistic.model %>% predict(test_x, type = "response")
+prob_train <- SS.logistic.model %>% predict(train_x, type = "response")
+preds <- ifelse(prob > 0.5,1 , 0)
+preds_train <- ifelse(prob_train > 0.5,1 , 0)
+
+
+
+
+# With under sampling
+under_prob <- SS.under_logistic.model %>% predict(test_x, type = "response")
+under_prob_train <- SS.under_logistic.model %>% predict(under_x, type = "response")
+
+under_preds <- ifelse(under_prob > 0.5,1 , 0)
+under_preds_train <- ifelse(under_prob_train > 0.5,1 , 0)
+
+
+
+#With Over sampling
+
+over_prob <- SS.over_logistic.model %>% predict(test_x, type = "response")
+over_prob_train <- SS.over_logistic.model %>% predict(over_x, type = "response")
+over_preds <- ifelse(over_prob > 0.5,1 , 0)
+over_preds_train <- ifelse(over_prob_train > 0.5,1 , 0)
+
+
+
+
+
+
+## As we observed the accuracy has dropped significantly by taking only statistically significant features.
+
+```
+#### Train Metrics
+```{r}
+
+### Please find train and test accuracies.
+
+# Without sampling
+Accuracy(preds_train,train_y)
+
+#Under Sampling
+Accuracy(under_preds_train,under_y)
+
+#Over Sampling
+Accuracy(over_preds_train,over_y)
+```
+
+#### Test Metrics 
+```{r}
+library("caret")
+
+
+# Without any sampling
+prob <- SS.logistic.model %>% predict(test_x, type = "response")
+
+preds <- ifelse(prob > 0.5,1 , 0)
+
+Accuracy(preds,test_y)
+plot_ROC(preds,test_y)
+plot_lift(preds,test_y)
+plot_F(prob,test_y)
+
+
+
+# With under sampling
+under_prob <- SS.under_logistic.model %>% predict(test_x, type = "response")
+
+under_preds <- ifelse(under_prob > 0.5,1 , 0)
+
+Accuracy(under_preds,test_y)
+plot_ROC(under_preds,test_y)
+plot_lift(under_preds,test_y)
+plot_F(under_prob,test_y)
+
+
+#With Over sampling
+
+over_prob <- SS.over_logistic.model %>% predict(test_x, type = "response")
+
+over_preds <- ifelse(over_prob > 0.5,1 , 0)
+
+Accuracy(over_preds,test_y)
+
+
+plot_ROC(over_preds,test_y)
+plot_lift(over_preds,test_y)
+plot_F(over_prob,test_y)
+
+
+
+## As we observed the accuracy has dropped significantly by taking only statistically significant features.
+```
+
+
+
+###  Decision Tree
+```{r}
+library(rpart)
+library(rpart.plot)
+
+```
+#### Modeling
+```{r}
+
+
+
+
+
+DT_fit1 <- rpart(cancel ~., data = overd, method = 'class')
+
+
+rpart.plot(DT_fit1, extra = 106)
+
+
+```
+#### Test
+```{r}
+
+
+DT_preds <-predict(DT_fit1, testd_x, type = 'prob')
+DT_class <- ifelse(DT_preds[,1] > DT_preds[,2],0 , 1)
+DT_probs <- ifelse(DT_preds[,1] > DT_preds[,2],DT_preds[,1] , DT_preds[,2])
+
+
+
+```
+
+#### Train Metrics
+```{r}
+
+
+DT_preds1 <-predict(DT_fit1, overd_x, type = 'prob')
+DT_class1 <- ifelse(DT_preds1[,1] > DT_preds1[,2],0 , 1)
+DT_probs1 <- ifelse(DT_preds1[,1] > DT_preds1[,2],DT_preds1[,1] , DT_preds1[,2])
+
+Accuracy(DT_class1,overd_y)
+
+
+```
+
+#### Test Metrics
+```{r}
+
+
+Accuracy(DT_class,testd_y)
+plot_ROC(DT_class,testd_y)
+plot_lift(DT_class,testd_y)
+plot_F(DT_probs,testd_y)
+```
+
+
+###  Random Forest classifer
+```{r}
+#install.packages("randomForest")
+library("randomForest")
+
+```
+#### Modeling
+```{r}
+overd$cancel <- as.character(overd$cancel)
+overd$cancel <- as.factor(overd$cancel)
+
+rf <- randomForest(cancel~., data=overd)
+print(rf)
+
+
+
+```
+#### Test
+```{r}
+
+
+RF_preds <-predict(rf, testd_x, type = 'prob')
+RF_class <- ifelse(RF_preds[,1] > RF_preds[,2],0 , 1)
+RF_probs <- ifelse(RF_preds[,1] > RF_preds[,2],RF_preds[,1] , RF_preds[,2])
+
+
+
+```
+#### Train Metrics
+```{r}
+
+
+
+RF_preds1 <-predict(rf, overd_x, type = 'prob')
+RF_class1 <- ifelse(RF_preds1[,1] > RF_preds1[,2],0 , 1)
+RF_probs1 <- ifelse(RF_preds1[,1] > RF_preds1[,2],RF_preds1[,1] , RF_preds1[,2])
+
+Accuracy(RF_class1,overd_y)
+
+
+```
+#### Test Metrics
+```{r}
+
+Accuracy(RF_class,testd_y)
+plot_ROC(RF_class,testd_y)
+plot_lift(RF_class,testd_y)
+plot_F(RF_probs,testd_y)
+ 
+
+
+
+```
+
+
+
+###  XGboost
+```{r}
+library("xgboost")
+
+```
+#### Modeling
+```{r}
+library("xgboost")
+xgb_train <- xgb.DMatrix(data = as.matrix(overd_x), label = overd_y)
+
+xgb_params <- list( 
+ eta = 0.1,
+ max_depth = 10, 
+ gamma=1,
+ subsample = 0.5,
+ colsample_bytree = 0.5,
+ eval_metric = "merror",
+ objective = "multi:softprob",
+ num_class = length(unique(data.dummy$cancel))
+)
+
+
+
+xgb_model <- xgb.train(
+  params = xgb_params,
+  data = xgb_train,
+  nrounds = 1000,
+  verbose = 1
+)
+xgb_model
+
+
+```
+#### Test
+```{r}
+
+#xgb_test <- xgb.DMatrix(data = as.matrix(testd_x), label = testd_y)
+XGB_preds <- predict(xgb_model, as.matrix(testd_x), reshape = TRUE)
+XGB_class <- ifelse(XGB_preds[,1] > XGB_preds[,2],0 , 1)
+XGB_probs <- ifelse(XGB_preds[,1] > XGB_preds[,2],XGB_preds[,1] , XGB_preds[,2])
+xgb.plot.importance(importance_matrix = xgb.importance(colnames(xgb_train), xgb_model))
+
+
+```
+
+#### Train Metrics
+```{r}
+
+#xgb_test <- xgb.DMatrix(data = as.matrix(testd_x), label = testd_y)
+XGB_preds1 <- predict(xgb_model, as.matrix(overd_x), reshape = TRUE)
+XGB_class1 <- ifelse(XGB_preds1[,1] > XGB_preds1[,2],0 , 1)
+XGB_probs1 <- ifelse(XGB_preds1[,1] > XGB_preds1[,2],XGB_preds1[,1] , XGB_preds1[,2])
+
+
+Accuracy(XGB_class1,overd_y)
+plot_ROC(XGB_class1,overd_y)
+
+```
+
+
+#### Test Metrics
+```{r}
+
+
+
+Accuracy(XGB_class,testd_y)
+plot_ROC(XGB_class,testd_y)
+plot_lift(XGB_class,testd_y)
+plot_F(XGB_probs,testd_y)
+
+```
+
+###  Majority voting
+```{r}
+#Voting among XGB_class,RF_class,DT_class
+
+```
+#### Average
+```{r}
+library(modeest)
+ensemble_class = cbind(XGB_class,RF_class,DT_class)
+
+
+ensemble_preds = apply(ensemble_class,1,function(x) names(which.max(table(x))))
+
+ensemble_preds = as.integer(ensemble_preds)
+Accuracy(ensemble_preds,testd_y)
+plot_ROC(ensemble_preds,testd_y)
+plot_lift(ensemble_preds,testd_y)
+
+
+```
+
+
