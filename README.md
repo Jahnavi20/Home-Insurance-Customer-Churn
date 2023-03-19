@@ -1,4 +1,4 @@
-# Home Insurance Customer Churn
+# Home Insurance Customer Churn Prediction
 ## Introduction
 * Kangaroo is a House Insurance American Company that is concerned about the company’s retention rates and wants to know what is causing policy cancellation and also retain existing customers.
 * The Kangaroo data set is based on 4 years of property insurance policies from 2013 to 2017. There are almost 30,000 policies in our dataset.  
